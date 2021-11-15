@@ -1,7 +1,10 @@
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.image import img_to_array, load_img
 
+from util import use_gpu
+
 import cv2
+
 import numpy as np
 
 import argparse
@@ -12,6 +15,7 @@ def get_args():
     parser.add_argument('--image_path', type=str)
     parser.add_argument('--threshold', type=float, default=0.5)
     parser.add_argument('--save_image_path', type=str)
+    parser.add_argument('--gpu_mem', type=int, default=2)
     args = parser.parse_args()
 
     return args
@@ -61,10 +65,11 @@ def test(model, args):
 if __name__ == '__main__':
 
     args = get_args()
-
+    use_gpu(args.gpu_mem)
+    
     if validate_args(args):
         
-        model = load_model('cool_model3.h5')
+        model = load_model(args.model)
         test(model, args)
 
 

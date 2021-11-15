@@ -6,6 +6,8 @@ from tensorflow.keras.losses import binary_crossentropy
 from tensorflow.keras.layers import Input, Concatenate, UpSampling2D, SeparableConv2D, Conv2D
 from tensorflow.keras.activations import relu
 
+from util import use_gpu
+
 from imutils import paths
 
 import numpy as np
@@ -18,16 +20,16 @@ import argparse
 def get_args():
     parser = argparse.ArgumentParser(description='Hair Mask Segmentation CNN Train')
     parser.add_argument('--image_data_format', default='channels_last')
-    parser.add_argument('--mini_batch_size', type=int, default=6)
+    parser.add_argument('--mini_batch_size', type=int, default=10)
     parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--steps_per_epoch', type=int, default=5)
     parser.add_argument('--lr', default=0.0001, type=float)
-    parser.add_argument('--set_size', type=int, default=400)
-    parser.add_argument('--set_division', type=int, default=10)
-    parser.add_argument('--training_cycles', type=int, default=2)
-    parser.add_argument('--model_name', type=str, default='./new_model.md5')
+    parser.add_argument('--samples', type=int, default=2000)
+    parser.add_argument('--set_size', type=int, default=200)
+    parser.add_argument('--model_name', type=str, default='./new_model.h5')
     parser.add_argument('--training_data_path',  default='./CelebA-HQ-img/')
     parser.add_argument('--testing_data_path',  default='./CelebAMask-HQ-mask-anno/')
+    parser.add_argument('--gpu_mem', type=int, default=2)
     args = parser.parse_args()
 
     return args
@@ -69,46 +71,47 @@ def setup_model(args):
 
 def train(model, args):
 
-    for z in range(args.training_cycles):
-        for i in range(0, args.set_division):
-            imageData = []
-            maskData = []
+    training_cycles = int(args.samples/args.set_size)
+    for i in range(0, training_cycles):
+        imageData = []
+        maskData = []
 
-            beginning_of_mini_set = int(i*args.set_size-(args.set_size/2))
-            end_of_mini_set = int(args.set_size+(i*args.set_size)-(args.set_size/2))
-            
-            for j in range(beginning_of_mini_set, end_of_mini_set):
-                try :
+        beginning_of_mini_set = int(i*args.set_size-(args.set_size/2))
+        end_of_mini_set = int(args.set_size+(i*args.set_size)-(args.set_size/2))
+        
+        for j in range(beginning_of_mini_set, end_of_mini_set):
+            try :
 
-                    maskData.append(img_to_array(load_img(f"{args.testing_data_path}{j}.png", color_mode="grayscale", target_size=(224, 224))))
-                    imageData.append(img_to_array(load_img(f"{args.training_data_path}{j}.jpg", target_size=(224, 224))))
+                maskData.append(img_to_array(load_img(f"{args.testing_data_path}{j}.png", color_mode="grayscale", target_size=(224, 224))))
+                imageData.append(img_to_array(load_img(f"{args.training_data_path}{j}.jpg", target_size=(224, 224))))
 
-                except FileNotFoundError as error:
+            except FileNotFoundError as error:
 
-                    continue
+                continue
 
-            maskData = np.array(maskData, dtype="float32")
-            imageData = np.array(imageData, dtype="float32")
+        maskData = np.array(maskData, dtype="float32")
+        imageData = np.array(imageData, dtype="float32")
 
 
-            imageData = imageData / 255.0
-            maskData = maskData / 255
-            maskData[maskData > 0.5] = 1
-            maskData[maskData <= 0.5] = 0
+        imageData = imageData / 255.0
+        maskData = maskData / 255
+        maskData[maskData > 0.5] = 1
+        maskData[maskData <= 0.5] = 0
 
-            (trainX, testX, trainY, testY) = train_test_split(imageData, maskData)
-            
+        (trainX, testX, trainY, testY) = train_test_split(imageData, maskData)
+        
 
-            model.fit(
-                x=trainX, y=trainY, batch_size=args.mini_batch_size,
-                validation_data=(testX, testY),
-                steps_per_epoch = args.steps_per_epoch,
-                epochs=args.epochs)
+        model.fit(
+            x=trainX, y=trainY, batch_size=args.mini_batch_size,
+            validation_data=(testX, testY),
+            steps_per_epoch = args.steps_per_epoch,
+            epochs=args.epochs)
 
 
 if __name__ == '__main__':
 
     args = get_args()
+    use_gpu(args.gpu_mem)
     model = setup_model(args)
     opt = Adam(lr=args.lr, decay=args.lr/args.epochs)
     model.compile(loss="binary_crossentropy", optimizer=opt,
